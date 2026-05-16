@@ -1,6 +1,5 @@
 """HW1 preprocessing: temporal split, cold-start filter, rating matrices."""
 
-import csv
 from pathlib import Path
 
 import numpy as np
@@ -11,15 +10,21 @@ TRAIN_RATIO = 0.8
 def load_ratings(path):
     """Read ratings CSV. Each row: (userId, movieId, rating, timestamp)."""
     rows = []
-    with open(path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
+    with open(path, encoding="utf-8") as f:
+        # userId,movieId,rating,timestamp
+        header = f.readline().strip().split(",")
+        for line in f:
+            if not line.strip():
+                continue
+            fields = line.strip().split(",")
+            # userId,movieId,rating,timestamp
+            # 1,1,4.0,964982703
             rows.append(
                 (
-                    int(row["userId"]),
-                    int(row["movieId"]),
-                    float(row["rating"]),
-                    int(row["timestamp"]),
+                    int(fields[0]),
+                    int(fields[1]),
+                    float(fields[2]),
+                    int(fields[3]),
                 )
             )
     return rows
