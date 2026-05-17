@@ -2,6 +2,8 @@
 
 import math
 
+from tqdm import tqdm
+
 from metrics import N_VALUES, average_metrics_per_user
 from preprocess import MOVIEID_IDX
 from ranking import group_by_user, top_n_from_scores
@@ -97,10 +99,15 @@ def evaluate_item_cf(result, k_values=None, n_values=None):
     test_movie_ids = {r[MOVIEID_IDX] for r in result["test"]}
 
     metrics = {}
-    for k in k_values:
+    for k in tqdm(k_values, desc="Item CF k", unit="k"):
         metrics[k] = {}
         neighbors_cache = {}
-        for movie_id in test_movie_ids:
+        for movie_id in tqdm(
+            test_movie_ids,
+            desc=f"Item CF neighbors (k={k})",
+            unit="item",
+            leave=False,
+        ):
             if movie_id in item_ratings:
                 neighbors_cache[movie_id] = top_k_similar_items(
                     movie_id, item_ratings, user_means, k
@@ -108,7 +115,12 @@ def evaluate_item_cf(result, k_values=None, n_values=None):
             else:
                 neighbors_cache[movie_id] = []
         scores_by_user = {}
-        for user_id, user_rows in test_by_user.items():
+        for user_id, user_rows in tqdm(
+            test_by_user.items(),
+            desc=f"Item CF predict (k={k})",
+            unit="user",
+            leave=False,
+        ):
             test_movies = list({r[MOVIEID_IDX] for r in user_rows})
             scores_by_user[user_id] = predict_test_user(
                 user_id,
