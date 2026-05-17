@@ -30,3 +30,9 @@ def user_top_n(user_rows, n):
         if len(top) == n:
             break
     return top
+
+
+def top_n_from_scores(movie_scores, n):
+    """Top-n movieIds by predicted score (highest first)."""
+    ranked = sorted(movie_scores.items(), key=lambda x: (x[1], -x[0]), reverse=True)
+    return [movie_id for movie_id, _ in ranked[:n]]
