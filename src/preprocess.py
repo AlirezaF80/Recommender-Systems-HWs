@@ -148,8 +148,3 @@ def print_stats(result):
     print("Rating matrices (shared movie columns):")
     print(f"  train: {train_m.shape[0]} users x {train_m.shape[1]} movies")
     print(f"  test:  {test_m.shape[0]} users x {test_m.shape[1]} movies")
-    print()
-    print("train_m:")
-    print(train_m)
-    print("test_m:")
-    print(test_m)
