@@ -5,7 +5,10 @@ from pathlib import Path
 import numpy as np
 
 TRAIN_RATIO = 0.8
-
+USERID_IDX = 0
+MOVIEID_IDX = 1
+RATING_IDX = 2
+TIMESTAMP_IDX = 3
 
 def load_ratings(path):
     """Read ratings CSV. Each row: (userId, movieId, rating, timestamp)."""
@@ -21,10 +24,10 @@ def load_ratings(path):
             # 1,1,4.0,964982703
             rows.append(
                 (
-                    int(fields[0]),
-                    int(fields[1]),
-                    float(fields[2]),
-                    int(fields[3]),
+                    int(fields[USERID_IDX]),
+                    int(fields[MOVIEID_IDX]),
+                    float(fields[RATING_IDX]),
+                    int(fields[TIMESTAMP_IDX]),
                 )
             )
     return rows
@@ -41,15 +44,15 @@ def split_by_time(rows, train_ratio=TRAIN_RATIO):
 
 def filter_test(train, test):
     """Keep test rows only for users who have at least one train rating."""
-    train_users = {r[0] for r in train}
-    filtered = [r for r in test if r[0] in train_users]
+    train_users = {r[USERID_IDX] for r in train}
+    filtered = [r for r in test if r[USERID_IDX] in train_users]
     return filtered
 
 
 def count_stats(rows):
     """Return counts: ratings, users, items."""
-    users = {r[0] for r in rows}
-    items = {r[1] for r in rows}
+    users = {r[USERID_IDX] for r in rows}
+    items = {r[MOVIEID_IDX] for r in rows}
     return {
         "ratings": len(rows),
         "users": len(users),
@@ -59,7 +62,7 @@ def count_stats(rows):
 
 def all_movie_ids(rows):
     """Sorted list of every movieId in the dataset."""
-    return sorted({r[1] for r in rows})
+    return sorted({r[MOVIEID_IDX] for r in rows})
 
 
 def build_matrices(train, test, movie_ids):
@@ -70,8 +73,8 @@ def build_matrices(train, test, movie_ids):
     item_id_to_idx = {mid: i for i, mid in enumerate(movie_ids)}
     n_items = len(movie_ids)
 
-    train_users = sorted({r[0] for r in train})
-    test_users = sorted({r[0] for r in test})
+    train_users = sorted({r[USERID_IDX] for r in train})
+    test_users = sorted({r[USERID_IDX] for r in test})
     train_user_to_idx = {uid: i for i, uid in enumerate(train_users)}
     test_user_to_idx = {uid: i for i, uid in enumerate(test_users)}
 
@@ -145,3 +148,8 @@ def print_stats(result):
     print("Rating matrices (shared movie columns):")
     print(f"  train: {train_m.shape[0]} users x {train_m.shape[1]} movies")
     print(f"  test:  {test_m.shape[0]} users x {test_m.shape[1]} movies")
+    print()
+    print("train_m:")
+    print(train_m)
+    print("test_m:")
+    print(test_m)
