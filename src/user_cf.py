@@ -111,9 +111,9 @@ def predict_rating(user_id, movie_id, neighbors, all_ratings, user_means):
         neighbor_ratings = all_ratings.get(neighbor_id, {})
         if movie_id not in neighbor_ratings:
             continue
-        r_vi = neighbor_ratings[movie_id]
+        rating_vi = neighbor_ratings[movie_id]
         mean_v = user_means[neighbor_id]
-        num += sim * (r_vi - mean_v)
+        num += sim * (rating_vi - mean_v)
         den += abs(sim)
     if den == 0.0:
         return mean_u

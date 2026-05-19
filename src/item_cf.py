@@ -6,31 +6,45 @@ from tqdm import tqdm
 
 from metrics import N_VALUES, average_metrics_per_user
 from preprocess import MOVIEID_IDX
-from ranking import group_by_user, top_n_from_scores
-from user_cf import K_VALUES, build_profiles
+from ranking import group_by_user
+from user_cf import (
+    K_VALUES,
+    build_movie_index,
+    build_profiles,
+    ranked_movie_ids_from_scores,
+)
 
 
-def build_item_ratings(user_ratings):
-    """Invert user profiles to item_ratings[movieId][userId] = rating."""
-    item_ratings = {}
-    for user_id, movies in user_ratings.items():
-        for movie_id, rating in movies.items():
-            if movie_id not in item_ratings:
-                item_ratings[movie_id] = {}
-            item_ratings[movie_id][user_id] = rating
-    return item_ratings
+def co_item_counts(movie_id, ratings_i, user_ratings):
+    """How many co-rating users each other item shares with movie_id."""
+    overlap = {}
+    for user_id in ratings_i:
+        for other_id in user_ratings[user_id]:
+            if other_id == movie_id:
+                continue
+            overlap[other_id] = overlap.get(other_id, 0) + 1
+            if overlap[other_id] >= 2:
+                break
+    return overlap
 
 
 def adjusted_cosine_sim(ratings_i, ratings_j, user_means):
     """Adjusted cosine on co-rating users; 0 if fewer than 2 co-raters."""
-    common = set(ratings_i) & set(ratings_j)
-    if len(common) < 2:
-        return 0.0
+    if len(ratings_i) <= len(ratings_j):
+        iter_items = ratings_i.items()
+        get_other = ratings_j.get
+    else:
+        iter_items = ratings_j.items()
+        get_other = ratings_i.get
 
     num = 0.0
     den_i = 0.0
     den_j = 0.0
-    for user_id in common:
+    common_count = 0
+    for user_id, _ in iter_items:
+        if get_other(user_id) is None:
+            continue
+        common_count += 1
         mean_u = user_means[user_id]
         diff_i = ratings_i[user_id] - mean_u
         diff_j = ratings_j[user_id] - mean_u
@@ -38,22 +52,26 @@ def adjusted_cosine_sim(ratings_i, ratings_j, user_means):
         den_i += diff_i * diff_i
         den_j += diff_j * diff_j
 
-    if den_i == 0.0 or den_j == 0.0:
+    if common_count < 2 or den_i == 0.0 or den_j == 0.0:
         return 0.0
     return num / (math.sqrt(den_i) * math.sqrt(den_j))
 
 
-def top_k_similar_items(movie_id, item_ratings, user_means, k):
-    """Top-k most similar items by adjusted cosine (exclude self)."""
-    ratings_i = item_ratings[movie_id]
+def ranked_similar_items(movie_id, item_ratings, user_ratings, user_means):
+    """Similar items sorted by adjusted cosine (exclude self)."""
+    ratings_i = item_ratings.get(movie_id)
+    if not ratings_i:
+        return []
+
+    overlap = co_item_counts(movie_id, ratings_i, user_ratings)
     sims = []
-    for other_id, ratings_j in item_ratings.items():
-        if other_id == movie_id:
+    for other_id, count in overlap.items():
+        if other_id == movie_id or count < 2:
             continue
-        sim = adjusted_cosine_sim(ratings_i, ratings_j, user_means)
+        sim = adjusted_cosine_sim(ratings_i, item_ratings[other_id], user_means)
         sims.append((other_id, sim))
     sims.sort(key=lambda x: (-x[1], x[0]))
-    return sims[:k]
+    return sims
 
 
 def predict_rating(user_id, movie_id, neighbors, user_ratings, user_means):
@@ -94,26 +112,22 @@ def evaluate_item_cf(result, k_values=None, n_values=None):
         n_values = N_VALUES
 
     user_ratings, user_means = build_profiles(result["train"])
-    item_ratings = build_item_ratings(user_ratings)
+    item_ratings = build_movie_index(user_ratings)
     test_by_user = group_by_user(result["test"])
     test_movie_ids = {r[MOVIEID_IDX] for r in result["test"]}
 
-    metrics = {}
+    ranked_neighbors_by_movie = {}
+    for movie_id in tqdm(test_movie_ids, desc="Item CF neighbors", unit="item"):
+        ranked_neighbors_by_movie[movie_id] = ranked_similar_items(
+            movie_id, item_ratings, user_ratings, user_means
+        )
+
+    metrics = {k: {} for k in k_values}
     for k in tqdm(k_values, desc="Item CF k", unit="k"):
-        metrics[k] = {}
-        neighbors_cache = {}
-        for movie_id in tqdm(
-            test_movie_ids,
-            desc=f"Item CF neighbors (k={k})",
-            unit="item",
-            leave=False,
-        ):
-            if movie_id in item_ratings:
-                neighbors_cache[movie_id] = top_k_similar_items(
-                    movie_id, item_ratings, user_means, k
-                )
-            else:
-                neighbors_cache[movie_id] = []
+        neighbors_cache = {
+            movie_id: ranked_neighbors_by_movie[movie_id][:k]
+            for movie_id in test_movie_ids
+        }
         scores_by_user = {}
         for user_id, user_rows in tqdm(
             test_by_user.items(),
@@ -130,9 +144,13 @@ def evaluate_item_cf(result, k_values=None, n_values=None):
                 neighbors_cache,
             )
 
+        ranked_movies_by_user = {
+            user_id: ranked_movie_ids_from_scores(scores)
+            for user_id, scores in scores_by_user.items()
+        }
         for n in n_values:
             recommended_by_user = {
-                user_id: top_n_from_scores(scores_by_user[user_id], n)
+                user_id: ranked_movies_by_user[user_id][:n]
                 for user_id in test_by_user
             }
             metrics[k][n] = average_metrics_per_user(
