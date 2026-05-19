@@ -15,19 +15,6 @@ from user_cf import (
 )
 
 
-def co_item_counts(movie_id, ratings_i, user_ratings):
-    """How many co-rating users each other item shares with movie_id."""
-    overlap = {}
-    for user_id in ratings_i:
-        for other_id in user_ratings[user_id]:
-            if other_id == movie_id:
-                continue
-            overlap[other_id] = overlap.get(other_id, 0) + 1
-            if overlap[other_id] >= 2:
-                break
-    return overlap
-
-
 def adjusted_cosine_sim(ratings_i, ratings_j, user_means):
     """Adjusted cosine on co-rating users; 0 if fewer than 2 co-raters."""
     if len(ratings_i) <= len(ratings_j):
@@ -57,18 +44,17 @@ def adjusted_cosine_sim(ratings_i, ratings_j, user_means):
     return num / (math.sqrt(den_i) * math.sqrt(den_j))
 
 
-def ranked_similar_items(movie_id, item_ratings, user_ratings, user_means):
-    """Similar items sorted by adjusted cosine (exclude self)."""
+def ranked_similar_items(movie_id, item_ratings, user_means):
+    """All other items sorted by adjusted cosine (exclude self)."""
     ratings_i = item_ratings.get(movie_id)
     if not ratings_i:
         return []
 
-    overlap = co_item_counts(movie_id, ratings_i, user_ratings)
     sims = []
-    for other_id, count in overlap.items():
-        if other_id == movie_id or count < 2:
+    for other_id, ratings_j in item_ratings.items():
+        if other_id == movie_id:
             continue
-        sim = adjusted_cosine_sim(ratings_i, item_ratings[other_id], user_means)
+        sim = adjusted_cosine_sim(ratings_i, ratings_j, user_means)
         sims.append((other_id, sim))
     sims.sort(key=lambda x: (-x[1], x[0]))
     return sims
@@ -119,7 +105,7 @@ def evaluate_item_cf(result, k_values=None, n_values=None):
     ranked_neighbors_by_movie = {}
     for movie_id in tqdm(test_movie_ids, desc="Item CF neighbors", unit="item"):
         ranked_neighbors_by_movie[movie_id] = ranked_similar_items(
-            movie_id, item_ratings, user_ratings, user_means
+            movie_id, item_ratings, user_means
         )
 
     metrics = {k: {} for k in k_values}
