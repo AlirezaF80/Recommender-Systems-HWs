@@ -38,13 +38,15 @@ def build_movie_index(all_ratings):
 
 
 def co_rating_counts(user_id, ratings_u, movie_users):
-    """How many train movies each other user shares with user_id."""
+    """How many train movies other users share with user_id."""
     overlap = {}
     for movie_id in ratings_u:
         for other_id in movie_users.get(movie_id, {}):
             if other_id == user_id:
                 continue
             overlap[other_id] = overlap.get(other_id, 0) + 1
+            if overlap[other_id] >= 2:
+                break
     return overlap
 
 
@@ -66,8 +68,8 @@ def pearson_sim(ratings_u, ratings_v):
     if n < 2:
         return 0.0
 
-    mean_u = sum(rating_u for rating_u, _ in common_pairs) / n
-    mean_v = sum(rating_v for _, rating_v in common_pairs) / n
+    mean_u = sum(ru for ru, _ in common_pairs) / n
+    mean_v = sum(rv for _, rv in common_pairs) / n
 
     num = 0.0
     den_u = 0.0
@@ -85,7 +87,7 @@ def pearson_sim(ratings_u, ratings_v):
 
 
 def ranked_neighbor_sims(user_id, all_ratings, movie_users):
-    """All other users sorted by Pearson (exclude self)."""
+    """All other users sorted by Pearson (excluding self)."""
     ratings_u = all_ratings[user_id]
     overlap = co_rating_counts(user_id, ratings_u, movie_users)
     sims = []
@@ -96,15 +98,8 @@ def ranked_neighbor_sims(user_id, all_ratings, movie_users):
             sims.append((other_id, 0.0))
         else:
             sims.append((other_id, pearson_sim(ratings_u, all_ratings[other_id])))
-    sims.sort(key=lambda x: (-x[1], x[0]))
+    sims.sort(key=lambda x: (x[1], x[0]), reverse=True)
     return sims
-
-
-def top_k_neighbors(user_id, all_ratings, k, movie_users=None):
-    """Top-k most similar users by Pearson (exclude self)."""
-    if movie_users is None:
-        movie_users = build_movie_index(all_ratings)
-    return ranked_neighbor_sims(user_id, all_ratings, movie_users)[:k]
 
 
 def predict_rating(user_id, movie_id, neighbors, all_ratings, user_means):
